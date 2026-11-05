@@ -415,7 +415,7 @@ ul.traps li.own::before{content:"★";font-size:19px;top:13px}
     <li><label><input type="checkbox" data-check="c2"><span><a href="#laws">Законы</a><em>нужны и для контрольной</em></span><b>10 мин</b><i class="must">обязательно</i></label></li>
     <li><label><input type="checkbox" data-check="c3"><span><a href="#forms">СДНФ и СКНФ</a><em>что это и как строить</em></span><b>20 мин</b><i class="must">обязательно</i></label></li>
     <li><label><input type="checkbox" data-check="c4"><span><a href="#count">Подсчёт и проверка</a><em>носитель, «сколько являются СКНФ»</em></span><b>15 мин</b><i class="must">обязательно</i></label></li>
-    <li><label><input type="checkbox" data-check="c5"><span><a href="#zheg">Многочлен Жегалкина</a><em>степень, треугольник</em></span><b>15 мин</b><i class="must">обязательно</i></label></li>
+    <li><label><input type="checkbox" data-check="c5"><span><a href="#zheg">Многочлен Жегалкина</a><em>степень, три способа построения</em></span><b>25 мин</b><i class="must">обязательно</i></label></li>
     <li><label><input type="checkbox" data-check="c6"><span><a href="#post">Классы Поста</a><em>пять классов и теорема</em></span><b>25 мин</b><i class="must">обязательно</i></label></li>
     <li><label><input type="checkbox" data-check="c7"><span><a href="#lab">Лаборатория</a><em>проверить себя на любой функции</em></span><b>5 мин</b><i class="opt">по желанию</i></label></li>
     <li><label><input type="checkbox" data-check="c8"><span><a href="#open">Открытый вопрос</a><em>и пробные вопросы с ответами</em></span><b>10 мин</b><i class="must">обязательно</i></label></li>
@@ -557,7 +557,8 @@ ul.traps li.own::before{content:"★";font-size:19px;top:13px}
     <p class="hand">Почему в x ∨ y добавляется xy</p>
     На наборе (1,1) сумма <code>x ⊕ y</code> даёт 0, а дизъюнкция должна дать 1. Слагаемое <code>xy</code> равно 1 только на этом наборе и исправляет значение. На остальных наборах оно равно 0 и ничего не меняет.
   </div>
-  <h3>Метод треугольника</h3>
+  <p>Построить многочлен можно тремя способами. Ответ у всех один, потому что многочлен единственный: выбирай тот, что быстрее для конкретной функции.</p>
+  <h3>Способ 1. Метод треугольника</h3>
   <p>Пишем вектор значений, каждая следующая строка это суммы <code>⊕</code> соседних чисел. <mark>Левый край</mark> даёт коэффициенты при наборах 000, 001, 010, … Единица на наборе означает, что в многочлен входит произведение переменных, которые в этом наборе равны 1.</p>
   <p>Для примера из главы 3 вектор 01010010:</p>
 <pre class="code triangle"><code><b>0</b> 1 0 1 0 0 1 0
@@ -569,6 +570,35 @@ ul.traps li.own::before{content:"★";font-size:19px;top:13px}
 <b>1</b> 0
 <b>1</b></code></pre>
   <p>Левый край: 0 1 0 0 0 1 1 1. Единицы стоят у наборов 001, 101, 110, 111, значит <code>P = z ⊕ xz ⊕ xy ⊕ xyz</code>.</p>
+
+  <h3>Способ 2. Неопределённые коэффициенты</h3>
+  <p>Записываем многочлен общего вида с неизвестными коэффициентами. Для двух переменных это <code>P = a₀ ⊕ a₁x ⊕ a₂y ⊕ a₃xy</code>. Подставляем наборы по порядку и находим коэффициенты по одному: на каждом шаге неизвестен ровно один.</p>
+  <p>Пример для <code>x → y</code> (значения 1, 1, 0, 1):</p>
+  <table class="tbl compact">
+    <thead><tr><th>Набор</th><th>Уравнение</th><th>Вывод</th></tr></thead>
+    <tbody>
+      <tr><td>00</td><td><code>a₀ = 1</code></td><td><code>a₀ = 1</code></td></tr>
+      <tr><td>01</td><td><code>a₀ ⊕ a₂ = 1</code></td><td><code>a₂ = 0</code></td></tr>
+      <tr><td>10</td><td><code>a₀ ⊕ a₁ = 0</code></td><td><code>a₁ = 1</code></td></tr>
+      <tr><td>11</td><td><code>a₀ ⊕ a₁ ⊕ a₂ ⊕ a₃ = 1</code></td><td><code>a₃ = 1</code></td></tr>
+    </tbody>
+  </table>
+  <p>Итог: <code>P = 1 ⊕ x ⊕ xy</code>.</p>
+
+  <h3>Способ 3. Через СДНФ</h3>
+  <ol class="ticks">
+    <li>Строим СДНФ.</li>
+    <li>Заменяем каждую <code>∨</code> на <code>⊕</code>. Так можно, потому что конъюнкции СДНФ никогда не равны 1 одновременно.</li>
+    <li>Заменяем каждое отрицание: <code>¬x = x ⊕ 1</code>.</li>
+    <li>Раскрываем скобки и сокращаем пары одинаковых слагаемых: <code>a ⊕ a = 0</code>.</li>
+  </ol>
+  <p>Тот же пример <code>x → y</code>. СДНФ: <code>¬x¬y ∨ ¬xy ∨ xy</code>.</p>
+  <p><code>(x ⊕ 1)(y ⊕ 1) ⊕ (x ⊕ 1)y ⊕ xy = (xy ⊕ x ⊕ y ⊕ 1) ⊕ (xy ⊕ y) ⊕ xy</code></p>
+  <p>Слагаемое <code>xy</code> встречается трижды и остаётся один раз, <code>y</code> дважды и сокращается. Итог тот же: <code>P = 1 ⊕ x ⊕ xy</code>.</p>
+  <div class="sticky red">
+    <p class="hand">Осторожно</p>
+    Заменять <code>∨</code> на <code>⊕</code> можно только в СДНФ. В обычной ДНФ конъюнкции могут быть равны 1 одновременно, и результат будет неверным: <code>x ∨ y</code> так превратилась бы в <code>x ⊕ y</code>, а это другая функция. Для обычной ДНФ используй <code>a ∨ b = a ⊕ b ⊕ ab</code>.
+  </div>
 </section>
 
 <!-- ПОСТ -->
@@ -704,6 +734,7 @@ ul.traps li.own::before{content:"★";font-size:19px;top:13px}
         <tr><td><code>x | y</code></td><td><code>1 ⊕ xy</code></td></tr>
         <tr><td><code>x ↓ y</code></td><td><code>1 ⊕ x ⊕ y ⊕ xy</code></td></tr>
       </tbody></table>
+      <p class="mini-p"><b>Три способа:</b> треугольник; неопределённые коэффициенты; СДНФ, где <code>∨</code> → <code>⊕</code> и <code>¬x</code> → <code>x ⊕ 1</code>.</p>
     </div>
     <div class="cc">
       <h3>Проверка СКНФ</h3>
