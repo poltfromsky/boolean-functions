@@ -316,6 +316,10 @@ ul.traps li.own::before{content:"★";font-size:19px;top:13px}
 .chip{font-size:13.5px;padding:2px 10px;border:1.5px solid var(--ink);border-radius:var(--hand-r)}
 .chip.yes{background:var(--good)}.chip.no{background:var(--bad)}
 /* варианты */
+.timer{position:sticky;top:10px;z-index:6;width:max-content;margin:0 0 14px auto;padding:5px 14px;font:700 27px/1.1 'Caveat',cursive;background:var(--sticky);border:1.6px solid var(--ink);border-radius:var(--hand-r);box-shadow:2px 3px 8px -3px var(--shadow)}
+.timer[hidden]{display:none}.timer.low{background:var(--sticky-red);color:var(--red)}
+.test-start .check{margin-top:6px}
+.res-time{color:var(--ink-2)}
 .tabs{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 18px}
 .field{display:block;margin-bottom:12px}.field .hand{display:block}
 .field input,.tq textarea,.res-text{width:100%;max-width:100%;font:400 16px/1.45 'Golos Text',sans-serif;color:var(--ink);background:var(--paper);border:1.6px solid var(--ink);border-radius:8px;padding:9px 11px}
@@ -415,7 +419,7 @@ ul.traps li.own::before{content:"★";font-size:19px;top:13px}
     <li><label><input type="checkbox" data-check="c6"><span><a href="#post">Классы Поста</a><em>пять классов и теорема</em></span><b>25 мин</b><i class="must">обязательно</i></label></li>
     <li><label><input type="checkbox" data-check="c7"><span><a href="#lab">Лаборатория</a><em>проверить себя на любой функции</em></span><b>5 мин</b><i class="opt">по желанию</i></label></li>
     <li><label><input type="checkbox" data-check="c8"><span><a href="#open">Открытый вопрос</a><em>и пробные вопросы с ответами</em></span><b>10 мин</b><i class="must">обязательно</i></label></li>
-    <li><label><input type="checkbox" data-check="c9"><span><a href="#tests">Варианты теста</a><em>четыре варианта с проверкой</em></span><b>по 15 мин</b><i class="must">обязательно</i></label></li>
+    <li><label><input type="checkbox" data-check="c9"><span><a href="#tests">Варианты теста</a><em>четыре варианта с проверкой</em></span><b>по 10 мин</b><i class="must">обязательно</i></label></li>
   </ul>
   <p class="aside-note"><b>Держи под рукой:</b> <a href="#cheat">шпаргалка на одну страницу</a>, в PDF она идёт первой.</p>
 </section>
@@ -669,7 +673,7 @@ ul.traps li.own::before{content:"★";font-size:19px;top:13px}
 <!-- ВАРИАНТЫ -->
 <section class="chapter noprint" id="tests" data-title="Варианты теста">
   <h2><span class="num">9</span>Варианты теста</h2>
-  <p>В каждом варианте 6 вопросов на 4 балла: вопросы 1–5 по 0,5 балла, вопрос 6 на 1,5. После проверки сразу видно баллы и ошибки. Вопрос 6 проверяется вручную, поэтому он остаётся «на проверке».</p>
+  <p>В каждом варианте 6 вопросов на 4 балла: вопросы 1–5 по 0,5 балла, вопрос 6 на 1,5. На вариант даётся 10 минут, таймер запускается кнопкой «Начать тест». После проверки сразу видно баллы и ошибки. Вопрос 6 проверяется вручную, поэтому он остаётся «на проверке».</p>
   <div class="tabs" role="tablist" aria-label="Варианты"></div>
   <div id="test-root"></div>
 </section>
@@ -1109,6 +1113,8 @@ ul.traps li.own::before{content:"★";font-size:19px;top:13px}
     var root = $('#test-root'), tabs = $('#tests .tabs'), current = 0;
     var fmt = function (n) { return String(n).replace('.', ','); };
     var LETTERS = ['А', 'Б', 'В', 'Г'];
+    var MINUTES = 10, timer = 0;
+    var letter = function (p) { return p === null ? '—' : LETTERS[p]; };
 
     VARIANTS.forEach(function (v, i) {
       var b = document.createElement('button');
@@ -1120,16 +1126,56 @@ ul.traps li.own::before{content:"★";font-size:19px;top:13px}
 
     function show(i) {
       current = i;
+      stopTimer();
       $$('.btn', tabs).forEach(function (b, n) {
         b.classList.toggle('on', n === i);
         b.setAttribute('aria-selected', n === i ? 'true' : 'false');
       });
-      render(VARIANTS[i]);
+      var v = VARIANTS[i], saved = loadAll()[v.title], run = loadRuns()[v.title];
+      if (saved) {
+        render(v);
+        restore(v, saved);
+      } else if (run) {
+        render(v);
+        resume(v, run);
+      } else {
+        renderStart(v);
+      }
+      markTabs();
+    }
+
+    /* Вопросы не видны, пока не нажата кнопка: таймер идёт с этого момента */
+    function renderStart(v) {
+      root.innerHTML = '<form class="test-start" novalidate>' +
+        '<label class="field"><span class="hand">Имя</span><input type="text" name="who" maxlength="80" autocomplete="off" required></label>' +
+        '<p>' + v.questions.length + ' вопросов с выбором и 1 открытый, ' + MINUTES + ' минут. Таймер запустится после нажатия кнопки, а когда время выйдет, ответы проверятся сами.</p>' +
+        '<p class="test-err" role="alert" hidden></p>' +
+        '<button type="submit" class="btn primary check">Начать тест</button></form>';
+      var form = $('form', root);
+      form.elements.who.value = store.get('dm-who') || '';
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var who = form.elements.who.value.trim();
+        if (!who) {
+          var err = $('.test-err', form);
+          err.textContent = 'Напиши имя, чтобы результат не потерялся.';
+          err.hidden = false;
+          return;
+        }
+        store.set('dm-who', who);
+        var run = { startedAt: Date.now(), who: who, picked: {}, open: '' };
+        saveRun(v, run);
+        render(v);
+        resume(v, run);
+        markTabs();
+        $('#tests').scrollIntoView();
+      });
     }
 
     function render(v) {
       var h = '<form class="test" novalidate>';
-      h += '<label class="field"><span class="hand">Имя</span><input type="text" name="who" maxlength="80" autocomplete="off" required></label>';
+      h += '<p class="timer" role="timer" hidden></p>';
+      h += '<label class="field"><span class="hand">Имя</span><input type="text" name="who" maxlength="80" autocomplete="off" disabled></label>';
       v.questions.forEach(function (q, i) {
         h += '<fieldset class="tq" data-i="' + i + '"><legend><span class="tq-n">' + (i + 1) + '</span><span class="tq-t">' + esc(q.q) + '</span></legend><div class="choices">';
         q.a.forEach(function (a, j) {
@@ -1143,60 +1189,178 @@ ul.traps li.own::before{content:"★";font-size:19px;top:13px}
       h += '<button type="submit" class="btn primary check">Проверить</button></form><div class="result" hidden></div>';
       root.innerHTML = h;
       var form = $('form', root);
-      form.addEventListener('submit', function (e) { e.preventDefault(); check(v, form); });
+      form.addEventListener('submit', function (e) { e.preventDefault(); check(v, form, false); });
     }
 
-    function check(v, form) {
+    /* Незавершённая попытка: время считается от момента старта, поэтому обновление страницы его не сбрасывает */
+    function loadRuns() {
+      try { return JSON.parse(store.get('dm-runs')) || {}; } catch (e) { return {}; }
+    }
+    function saveRun(v, run) {
+      var all = loadRuns();
+      all[v.title] = run;
+      store.set('dm-runs', JSON.stringify(all));
+    }
+    function dropRun(v) {
+      var all = loadRuns();
+      delete all[v.title];
+      store.set('dm-runs', JSON.stringify(all));
+    }
+    function stopTimer() {
+      if (timer) { clearInterval(timer); timer = 0; }
+    }
+    function clock(sec) {
+      var m = Math.floor(sec / 60), r = sec % 60;
+      return (m < 10 ? '0' : '') + m + ':' + (r < 10 ? '0' : '') + r;
+    }
+
+    function resume(v, run) {
+      var form = $('form', root), out = $('.timer', form);
+      form.elements.who.value = run.who;
+      form.elements.open.value = run.open || '';
+      Object.keys(run.picked).forEach(function (i) {
+        $('input[name=q' + i + '][value="' + run.picked[i] + '"]', form).checked = true;
+      });
+      form.addEventListener('change', function (e) {
+        var m = /^q(\d)$/.exec(e.target.name || '');
+        if (m) { run.picked[m[1]] = +e.target.value; saveRun(v, run); }
+      });
+      form.elements.open.addEventListener('input', function () {
+        run.open = form.elements.open.value;
+        saveRun(v, run);
+      });
+      out.hidden = false;
+      function tick() {
+        var left = Math.ceil((run.startedAt + MINUTES * 60000 - Date.now()) / 1000);
+        if (left <= 0) {
+          check(v, form, true);
+          return;
+        }
+        out.textContent = 'Осталось ' + clock(left);
+        out.classList.toggle('low', left <= 60);
+      }
+      form.dataset.startedAt = run.startedAt;
+      timer = setInterval(tick, 1000);
+      tick();
+    }
+
+    function check(v, form, expired) {
       var err = $('.test-err', form), who = form.elements.who.value.trim();
       var picked = v.questions.map(function (_, i) {
         var c = $('input[name=q' + i + ']:checked', form);
         return c ? +c.value : null;
       });
       var missing = picked.map(function (p, i) { return p === null ? i + 1 : 0; }).filter(Boolean);
-      if (!who || missing.length) {
-        err.textContent = !who ? 'Напиши имя, чтобы результат не потерялся.' : 'Нет ответа на вопросы: ' + missing.join(', ') + '.';
+      if (!expired && missing.length) {
+        err.textContent = 'Нет ответа на вопросы: ' + missing.join(', ') + '. Без ответа вопрос не засчитается, а время ещё есть.';
         err.hidden = false;
         return;
       }
       err.hidden = true;
-      var wrong = [];
+      stopTimer();
+      dropRun(v);
+      var spent = Math.min(MINUTES * 60, Math.round((Date.now() - +form.dataset.startedAt) / 1000));
+      var wrong = v.questions.map(function (q, i) { return picked[i] === q.ok ? 0 : i + 1; }).filter(Boolean);
+      var attempt = {
+        id: newId(), who: who, picked: picked, open: form.elements.open.value.trim(),
+        score: (v.questions.length - wrong.length) * PER_CHOICE, wrong: wrong, saved: false, status: null,
+        spent: spent, expired: expired
+      };
+      remember(v, attempt);
+      showResult(v, form, attempt);
+      send(v, attempt);
+    }
+
+    /* Попытка хранится в браузере, поэтому переживает обновление страницы */
+    function loadAll() {
+      try { return JSON.parse(store.get('dm-attempts')) || {}; } catch (e) { return {}; }
+    }
+    function remember(v, attempt) {
+      var all = loadAll();
+      all[v.title] = attempt;
+      store.set('dm-attempts', JSON.stringify(all));
+    }
+    function forget(v) {
+      var all = loadAll();
+      delete all[v.title];
+      store.set('dm-attempts', JSON.stringify(all));
+    }
+    function newId() {
+      var a = new Uint8Array(16);
+      crypto.getRandomValues(a);
+      return Array.prototype.map.call(a, function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
+    }
+
+    function restore(v, attempt) {
+      var form = $('form', root);
+      form.elements.who.value = attempt.who;
+      form.elements.open.value = attempt.open;
+      attempt.picked.forEach(function (p, i) { if (p !== null) { $('input[name=q' + i + '][value="' + p + '"]', form).checked = true; } });
+      showResult(v, form, attempt);
+      if (attempt.saved) { refresh(v, attempt); } else { send(v, attempt); }
+    }
+
+    function showResult(v, form, attempt) {
       v.questions.forEach(function (q, i) {
-        var box = $('.tq[data-i="' + i + '"]', form), ok = picked[i] === q.ok;
-        if (!ok) { wrong.push(i + 1); }
+        var box = $('.tq[data-i="' + i + '"]', form), ok = attempt.picked[i] === q.ok;
         box.classList.add(ok ? 'right' : 'wrong');
         $$('.choice', box).forEach(function (l, j) {
           l.classList.toggle('is-key', j === q.ok);
-          l.classList.toggle('is-miss', j === picked[i] && !ok);
+          l.classList.toggle('is-miss', j === attempt.picked[i] && !ok);
         });
         var w = $('.why', box);
-        w.textContent = (ok ? 'Верно. ' : 'Неверно. Правильный ответ: ' + q.a[q.ok] + '. ') + q.why;
+        w.textContent = (ok ? 'Верно. ' : (attempt.picked[i] === null ? 'Нет ответа. ' : 'Неверно. ') + 'Правильный ответ: ' + q.a[q.ok] + '. ') + q.why;
         w.hidden = false;
       });
-      var score = (v.questions.length - wrong.length) * PER_CHOICE;
-      var open = form.elements.open.value.trim();
-      var openNote = $('.tq.open .why', form);
-      openNote.textContent = 'На проверке: до ' + fmt(PER_OPEN) + ' балла.';
-      openNote.hidden = false;
+      $('.tq.open .why', form).hidden = false;
       $$('input, textarea', form).forEach(function (el) { el.disabled = true; });
       $('.check', form).hidden = true;
+      $('.timer', form).hidden = true;
 
-      var report = {
-        variant: v.title, name: who, score: score, wrong: wrong.join(', ') || 'нет',
-        answers: picked.map(function (p) { return LETTERS[p]; }).join(' '),
-        question: v.open, open: open || 'нет ответа'
-      };
-      var text = report.name + ', ' + report.variant + '\nВопросы 1–5: ' + fmt(score) + ' из ' + fmt(MAX_AUTO) +
-        '\nОшибки: ' + report.wrong + '\nОтветы: ' + report.answers + '\nВопрос 6: ' + report.question + '\nОтвет: ' + report.open;
       var res = $('.result', root);
-      res.innerHTML = '<p class="hand">Результат</p><p class="res-score">' + fmt(score) + ' из ' + fmt(MAX_AUTO) + '</p>' +
-        '<p>Это вопросы 1–5. Вопрос 6 на проверке, за него ещё до ' + fmt(PER_OPEN) + ' балла, всего максимум 4.</p>' +
+      res.innerHTML = '<p class="hand">Результат</p><p class="res-score"></p><p class="res-note"></p><p class="res-time"></p>' +
         '<p class="res-save" role="status"></p>' +
-        '<div class="fig-ctl"><button type="button" class="btn" data-res="copy">Скопировать результат</button><button type="button" class="btn" data-res="again">Решить заново</button></div>' +
+        '<div class="fig-ctl"><button type="button" class="btn primary" data-res="status">Обновить статус</button>' +
+        '<button type="button" class="btn" data-res="copy">Скопировать результат</button>' +
+        '<button type="button" class="btn" data-res="again">Решить заново</button></div>' +
         '<textarea class="res-text" readonly rows="6" hidden></textarea>';
       res.hidden = false;
-      $('[data-res=again]', res).addEventListener('click', function () { show(current); $('#tests').scrollIntoView(); });
-      $('[data-res=copy]', res).addEventListener('click', function () { copy(text, res); });
-      send(report, $('.res-save', res));
+      $('.res-time', res).textContent = attempt.spent === undefined ? '' :
+        (attempt.expired ? 'Время вышло, ответы проверены автоматически: ' : 'Время: ') + clock(attempt.spent) + ' из ' + clock(MINUTES * 60) + '.';
+      $('[data-res=status]', res).addEventListener('click', function () {
+        if (attempt.saved) { refresh(v, attempt); } else { send(v, attempt); }
+      });
+      $('[data-res=copy]', res).addEventListener('click', function () { copy(reportText(v, attempt), res); });
+      $('[data-res=again]', res).addEventListener('click', function () {
+        if (!window.confirm('Текущий результат исчезнет с этой страницы. В таблице он останется.')) { return; }
+        forget(v);
+        show(current);
+        $('#tests').scrollIntoView();
+      });
+      drawStatus(attempt);
+      markTabs();
+    }
+
+    function drawStatus(attempt) {
+      var res = $('.result', root), note = $('.tq.open .why', root), st = attempt.status;
+      if (st && st.checked) {
+        $('.res-score', res).textContent = fmt(st.total) + ' из 4';
+        $('.res-note', res).textContent = 'Проверено. Вопросы 1–5: ' + fmt(attempt.score) + ' из ' + fmt(MAX_AUTO) + '. Вопрос 6: ' + fmt(st.open) + ' из ' + fmt(PER_OPEN) + '.';
+        note.textContent = 'Проверено: ' + fmt(st.open) + ' из ' + fmt(PER_OPEN) + '.';
+      } else {
+        $('.res-score', res).textContent = fmt(attempt.score) + ' из ' + fmt(MAX_AUTO);
+        $('.res-note', res).textContent = 'Это вопросы 1–5. Вопрос 6 на проверке, за него ещё до ' + fmt(PER_OPEN) + ' балла, всего максимум 4.';
+        note.textContent = 'На проверке: до ' + fmt(PER_OPEN) + ' балла.';
+      }
+    }
+
+    function reportText(v, attempt) {
+      var st = attempt.status;
+      return attempt.who + ', ' + v.title + '\nВопросы 1–5: ' + fmt(attempt.score) + ' из ' + fmt(MAX_AUTO) +
+        '\nОшибки: ' + (attempt.wrong.join(', ') || 'нет') + '\nОтветы: ' + attempt.picked.map(letter).join(' ') +
+        '\nВопрос 6: ' + v.open + '\nОтвет: ' + (attempt.open || 'нет ответа') +
+        (attempt.spent === undefined ? '' : '\nВремя: ' + clock(attempt.spent)) +
+        (st && st.checked ? '\nИтог: ' + fmt(st.total) + ' из 4' : '\nВопрос 6 на проверке');
     }
 
     function copy(text, res) {
@@ -1208,16 +1372,57 @@ ul.traps li.own::before{content:"★";font-size:19px;top:13px}
     }
 
     /* Результаты уходят в Google Таблицу. Если не вышло, остаётся кнопка копирования. */
-    function send(report, out) {
+    function send(v, attempt) {
+      var out = $('.res-save', root);
       if (!ENDPOINT) {
         out.textContent = 'Автосохранение не настроено: скопируй результат и отправь Егору.';
         return;
       }
       out.textContent = 'Сохраняю результат…';
+      var report = {
+        id: attempt.id, variant: v.title, name: attempt.who, score: attempt.score, wrong: attempt.wrong.join(', ') || 'нет',
+        answers: attempt.picked.map(letter).join(' '), question: v.open, open: attempt.open || 'нет ответа',
+        time: attempt.spent === undefined ? '' : clock(attempt.spent) + (attempt.expired ? ' (время вышло)' : '')
+      };
       fetch(ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(report) })
         .then(function (r) { return r.json(); })
-        .then(function (d) { if (!d.ok) { throw new Error('rejected'); } out.textContent = 'Результат сохранён, Егор его увидит.'; })
-        .catch(function () { out.textContent = 'Сохранить не вышло: скопируй результат и отправь Егору.'; });
+        .then(function (d) {
+          if (!d.ok) { throw new Error('rejected'); }
+          attempt.saved = true;
+          remember(v, attempt);
+          if (VARIANTS[current] === v) { $('.res-save', root).textContent = 'Результат сохранён, Егор его увидит.'; }
+        })
+        .catch(function () {
+          if (VARIANTS[current] === v) { $('.res-save', root).textContent = 'Сохранить не вышло: нажми «Обновить статус» позже или скопируй результат и отправь Егору.'; }
+        });
+    }
+
+    /* Узнаём у таблицы, поставлен ли балл за вопрос 6 */
+    function refresh(v, attempt) {
+      var out = $('.res-save', root);
+      if (!ENDPOINT) { return; }
+      out.textContent = 'Узнаю статус проверки…';
+      fetch(ENDPOINT + '?id=' + attempt.id)
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (!d.ok) { throw new Error('rejected'); }
+          if (VARIANTS[current] !== v) { return; }
+          if (!d.found) { $('.res-save', root).textContent = 'Эта попытка не найдена в таблице.'; return; }
+          attempt.status = { checked: d.checked, open: d.open, total: d.total };
+          remember(v, attempt);
+          drawStatus(attempt);
+          $('.res-save', root).textContent = d.checked ? 'Статус обновлён.' : 'Пока на проверке.';
+        })
+        .catch(function () {
+          if (VARIANTS[current] === v) { $('.res-save', root).textContent = 'Не удалось узнать статус. Показан последний известный результат.'; }
+        });
+    }
+
+    function markTabs() {
+      var all = loadAll();
+      $$('.btn', tabs).forEach(function (b, n) {
+        b.textContent = VARIANTS[n].title + (all[VARIANTS[n].title] ? ' ✓' : '');
+      });
     }
 
     var want = +new URLSearchParams(location.search).get('v');
